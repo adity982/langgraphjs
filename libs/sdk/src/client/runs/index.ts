@@ -432,6 +432,13 @@ export class RunsClient<
           signal?: AbortSignal;
           cancelOnDisconnect?: boolean;
           lastEventId?: string;
+          /**
+           * The checkpoint whose state the caller already shows, such as the
+           * thread's head. Servers that support resuming from a checkpoint
+           * then send only the run's events after it; other servers ignore
+           * it. A `lastEventId` other than `"-1"` takes precedence.
+           */
+          checkpointId?: string;
           streamMode?: StreamMode | StreamMode[];
           /**
            * Idle-reconnect policy.
@@ -473,6 +480,7 @@ export class RunsClient<
       params: {
         cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0",
         stream_mode: opts?.streamMode,
+        checkpoint_id: opts?.checkpointId,
       },
     });
   }

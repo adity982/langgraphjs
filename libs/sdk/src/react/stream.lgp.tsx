@@ -748,6 +748,7 @@ export function useStreamLGP<
         event: StreamEvent;
         data: unknown;
       }) => boolean;
+      checkpointId?: string;
     }
   ) => {
     setToolProgressMap(new Map());
@@ -774,6 +775,7 @@ export function useStreamLGP<
           signal,
           lastEventId,
           streamMode: joinOptions?.streamMode,
+          checkpointId: joinOptions?.checkpointId,
         }) as AsyncGenerator<
           EventStreamEvent<StateType, UpdateType, CustomType>
         >;
@@ -809,13 +811,32 @@ export function useStreamLGP<
     );
   };
 
+  // Rejoin once the head has loaded, so the server can send only what came
+  // after it. On the render that switches threads the head can still be the
+  // previous thread's.
   const reconnectKey = useMemo(() => {
-    if (!runMetadataStorage || stream.isLoading) return undefined;
+    if (!runMetadataStorage || stream.isLoading || history.isLoading) {
+      return undefined;
+    }
     if (typeof window === "undefined") return undefined;
+    const checkpoint = branchContext.threadHead?.checkpoint;
+    if (checkpoint?.thread_id != null && checkpoint.thread_id !== threadId) {
+      return undefined;
+    }
     const runId = runMetadataStorage?.getItem(`lg:stream:${threadId}`);
     if (!runId) return undefined;
-    return { runId, threadId };
-  }, [runMetadataStorage, stream.isLoading, threadId]);
+    return {
+      runId,
+      threadId,
+      checkpointId: checkpoint?.checkpoint_id ?? undefined,
+    };
+  }, [
+    runMetadataStorage,
+    stream.isLoading,
+    history.isLoading,
+    branchContext.threadHead,
+    threadId,
+  ]);
 
   const shouldReconnect = !!runMetadataStorage;
   const reconnectRef = useRef({ threadId, shouldReconnect });
@@ -833,7 +854,12 @@ export function useStreamLGP<
   useEffect(() => {
     if (reconnectKey && reconnectRef.current.shouldReconnect) {
       reconnectRef.current.shouldReconnect = false;
-      void joinStreamRef.current?.(reconnectKey.runId);
+      // The stream reports loading only once the queued join starts; until
+      // then this keeps a pending tool call in the head from running.
+      threadIdStreamingRef.current = reconnectKey.threadId;
+      void joinStreamRef.current?.(reconnectKey.runId, undefined, {
+        checkpointId: reconnectKey.checkpointId,
+      });
     }
   }, [reconnectKey]);
 
@@ -849,13 +875,15 @@ export function useStreamLGP<
   }, [threadId]);
 
   // Thread state values never carry `__interrupt__`; a pending call is in the
-  // head's tasks. A run still streaming, such as one rejoined after a reload,
-  // may be answering it, and on the render that switches threads the head can
-  // still be the previous thread's.
+  // head's tasks. A run still streaming or about to be rejoined, such as after
+  // a reload, may be answering it, and on the render that switches threads the
+  // head can still be the previous thread's.
   const threadHead = branchContext.threadHead;
   const pendingToolValues =
     stream.values == null &&
     !stream.isLoading &&
+    !(reconnectKey && reconnectRef.current.shouldReconnect) &&
+    threadIdStreamingRef.current !== threadId &&
     threadHead?.checkpoint?.thread_id === threadId
       ? {
           __interrupt__: threadHead.tasks?.flatMap(

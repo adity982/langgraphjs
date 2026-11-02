@@ -539,6 +539,49 @@ describe("Client streaming with retry", () => {
       const [url] = mockFetch.mock.calls[0];
       expect(url.toString()).toContain("cancel_on_disconnect=1");
     });
+
+    test("sends checkpointId as checkpoint_id on the join and its reconnect, next to the last event id", async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          createErroringSSEResponseBody(
+            [{ id: "7", event: "values", data: {} }],
+            new TypeError("disconnected")
+          ),
+          {
+            headers: {
+              "content-type": "text/event-stream",
+              location: "/threads/thread-1/runs/run-1/stream",
+            },
+          }
+        )
+      );
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          createSSEResponseBody([{ id: "8", event: "values", data: {} }])
+        )
+      );
+
+      const consume = gatherStream(
+        client.runs.joinStream("thread-1", "run-1", {
+          lastEventId: "-1",
+          checkpointId: "cp-1",
+        })
+      );
+      await vi.runAllTimersAsync();
+      await consume;
+
+      expect(
+        mockFetch.mock.calls.map(([url, init]) => ({
+          checkpointId: new URL(url.toString()).searchParams.getAll(
+            "checkpoint_id"
+          ),
+          lastEventId: new Headers(init.headers).get("last-event-id"),
+        }))
+      ).toEqual([
+        { checkpointId: ["cp-1"], lastEventId: "-1" },
+        { checkpointId: ["cp-1"], lastEventId: "7" },
+      ]);
+    });
   });
 
   describe("threads.joinStream()", () => {
