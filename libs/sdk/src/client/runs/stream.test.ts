@@ -550,7 +550,8 @@ describe("Client streaming with retry", () => {
           {
             headers: {
               "content-type": "text/event-stream",
-              location: "/threads/thread-1/runs/run-1/stream",
+              location:
+                "/threads/thread-1/runs/run-1/stream?cancel_on_disconnect=0&checkpoint_id=cp-1",
             },
           }
         )
@@ -572,14 +573,19 @@ describe("Client streaming with retry", () => {
 
       expect(
         mockFetch.mock.calls.map(([url, init]) => ({
-          checkpointId: new URL(url.toString()).searchParams.getAll(
-            "checkpoint_id"
-          ),
+          query: new URL(url.toString()).search,
           lastEventId: new Headers(init.headers).get("last-event-id"),
         }))
       ).toEqual([
-        { checkpointId: ["cp-1"], lastEventId: "-1" },
-        { checkpointId: ["cp-1"], lastEventId: "7" },
+        {
+          query: "?cancel_on_disconnect=0&checkpoint_id=cp-1",
+          lastEventId: "-1",
+        },
+        {
+          query:
+            "?cancel_on_disconnect=0&checkpoint_id=cp-1&cancel_on_disconnect=0&checkpoint_id=cp-1",
+          lastEventId: "7",
+        },
       ]);
     });
   });
