@@ -1,5 +1,11 @@
 # @langchain/langgraph-sdk
 
+## 1.12.10
+
+### Patch Changes
+
+- [#3163](https://github.com/langchain-ai/langgraphjs/pull/3163) [`2f7b082`](https://github.com/langchain-ai/langgraphjs/commit/2f7b082df1fdf18122e41dead7cce7cda3c7fb6a) Thanks [@eliornl](https://github.com/eliornl)! - When a headless tool finishes after a switch to another thread, `StreamOrchestrator` no longer sends its result to the new thread, keyed by the previous thread's interrupt id, and the `useStream` hook no longer streams the previous thread's resumed run into the new thread's view and no longer aborts a run the new thread is streaming. The call stays pending on its own thread and runs again when that thread is shown.
+
 ## 1.12.9
 
 ### Patch Changes
